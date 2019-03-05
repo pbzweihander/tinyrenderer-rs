@@ -1,0 +1,9 @@
+[package]
+name = "tinyrenderer"
+version = "0.1.0"
+authors = ["pbzweihander <pbzweihander@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+png = "0.14.0"
+failure = "0.1.5"
