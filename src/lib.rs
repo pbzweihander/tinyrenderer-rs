@@ -12,20 +12,12 @@ pub use crate::{
     vec::{Vec2, Vec3},
 };
 
-fn diff(a: u32, b: u32) -> u32 {
-    if a > b {
-        a - b
-    } else {
-        b - a
-    }
-}
-
 pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
     let mut steep = false;
 
     let (Vec2(x0, y0), Vec2(x1, y1)) = (v0, v1);
 
-    let (x0, x1, y0, y1) = if diff(x0, x1) < diff(y0, y1) {
+    let (x0, x1, y0, y1) = if isize::abs(x0 - x1) < isize::abs(y0 - y1) {
         steep = true;
         (y0, y1, x0, x1)
     } else {
@@ -38,8 +30,8 @@ pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
         (x0, x1, y0, y1)
     };
 
-    let dx = x1 as isize - x0 as isize;
-    let dy = y1 as isize - y0 as isize;
+    let dx = x1 - x0;
+    let dy = y1 - y0;
 
     let derror2 = isize::abs(dy) * 2;
     let mut error2 = 0;
@@ -48,10 +40,11 @@ pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
 
     for x in x0..=x1 {
         if steep {
-            image.set(y, x, color);
+            image.set(y as u32, x as u32, color);
         } else {
-            image.set(x, y, color);
+            image.set(x as u32, y as u32, color);
         }
+
         error2 += derror2;
         if error2 > dx {
             y = if y1 > y0 { y + 1 } else { y - 1 };
@@ -75,7 +68,7 @@ pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
                     .hadamard(Vec2(image.width as f32, image.height as f32)),
             );
 
-            let (v0, v1) = (v0.map(|f| f as u32), v1.map(|f| f as u32));
+            let (v0, v1) = (v0.map(|f| f as isize), v1.map(|f| f as isize));
 
             line(v0, v1, image, color);
         }

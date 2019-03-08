@@ -1,7 +1,7 @@
 use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Vec3<I = u32>(pub I, pub I, pub I);
+pub struct Vec3<I = isize>(pub I, pub I, pub I);
 
 impl<I> Vec3<I> {
     pub fn convert<J: From<I>>(self) -> Vec3<J> {
@@ -103,7 +103,7 @@ where
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Vec2<I = u32>(pub I, pub I);
+pub struct Vec2<I = isize>(pub I, pub I);
 
 impl<I> Vec2<I> {
     pub fn convert<J: From<I>>(self) -> Vec2<J> {
