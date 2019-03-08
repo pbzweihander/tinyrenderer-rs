@@ -57,22 +57,6 @@ impl Image {
         self
     }
 
-    #[cfg(test)]
-    fn flip_vertically_orig(&mut self) -> &mut Self {
-        let half = self.height >> 1;
-
-        for y in 0..half {
-            for x in 0..self.width {
-                let top_line = self.coord(x, y);
-                let bottom_line = self.coord(x, self.height - y - 1);
-
-                self.data.swap(top_line, bottom_line);
-            }
-        }
-
-        self
-    }
-
     pub fn flip_vertically(&mut self) -> &mut Self {
         let half = self.height >> 1;
 
@@ -146,11 +130,9 @@ mod tests {
     #[test]
     fn test_flip_vertically() {
         let mut image = make_image();
-        let mut image1 = image.clone();
         let mut data: Vec<Vec<_>> = image.data.clone().chunks(255).map(|s| s.to_vec()).collect();
 
         image.flip_vertically();
-        image1.flip_vertically_orig();
         data.reverse();
 
         assert_eq!(
@@ -160,7 +142,6 @@ mod tests {
                 .flat_map(IntoIterator::into_iter)
                 .collect::<Vec<_>>(),
         );
-        assert_eq!(image.data, image1.data);
     }
 
     #[bench]
@@ -169,15 +150,6 @@ mod tests {
 
         b.iter(|| {
             image.flip_vertically();
-        });
-    }
-
-    #[bench]
-    fn bench_flip_vertically_orig(b: &mut Bencher) {
-        let mut image = make_image();
-
-        b.iter(|| {
-            image.flip_vertically_orig();
         });
     }
 }
