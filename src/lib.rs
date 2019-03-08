@@ -5,8 +5,12 @@ use obj::Obj;
 pub use failure::Error;
 
 pub mod image;
+pub mod vec;
 
-pub use crate::image::{Color, Image};
+pub use crate::{
+    image::{Color, Image},
+    vec::{Vec2, Vec3},
+};
 
 fn diff(a: u32, b: u32) -> u32 {
     if a > b {
@@ -16,8 +20,10 @@ fn diff(a: u32, b: u32) -> u32 {
     }
 }
 
-pub fn line(x0: u32, y0: u32, x1: u32, y1: u32, image: &mut Image, color: Color) {
+pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
     let mut steep = false;
+
+    let (Vec2(x0, y0), Vec2(x1, y1)) = (v0, v1);
 
     let (x0, x1, y0, y1) = if diff(x0, x1) < diff(y0, y1) {
         steep = true;
@@ -57,17 +63,21 @@ pub fn line(x0: u32, y0: u32, x1: u32, y1: u32, image: &mut Image, color: Color)
 pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
     for face in model.indices.chunks_exact(3) {
         for &(i, j) in &[(0, 1), (1, 2), (2, 0)] {
-            let [x0, y0, _] = model.vertices[face[i] as usize].position;
-            let [x1, y1, _] = model.vertices[face[j] as usize].position;
+            let v0: Vec3<_> = model.vertices[face[i] as usize].position.into();
+            let v1: Vec3<_> = model.vertices[face[j] as usize].position.into();
 
-            let (x0, x1, y0, y1) = (
-                ((x0 + 1f32) * image.width as f32 / 2f32) as u32,
-                ((x1 + 1f32) * image.width as f32 / 2f32) as u32,
-                ((y0 + 1f32) * image.height as f32 / 2f32) as u32,
-                ((y1 + 1f32) * image.height as f32 / 2f32) as u32,
+            let (v0, v1): (Vec2<f32>, Vec2<f32>) = (v0.into(), v1.into());
+
+            let (v0, v1) = (
+                ((v0 + Vec2(1f32, 1f32)) / 2f32)
+                    .hadamard(Vec2(image.width as f32, image.height as f32)),
+                ((v1 + Vec2(1f32, 1f32)) / 2f32)
+                    .hadamard(Vec2(image.width as f32, image.height as f32)),
             );
 
-            line(x0, y0, x1, y1, image, color);
+            let (v0, v1) = (v0.map(|f| f as u32), v1.map(|f| f as u32));
+
+            line(v0, v1, image, color);
         }
     }
 }
@@ -77,7 +87,7 @@ mod tests {
     extern crate test;
 
     use {
-        crate::{line, Color, Image},
+        crate::{line, Color, Image, Vec2},
         test::Bencher,
     };
 
@@ -88,10 +98,15 @@ mod tests {
     fn bench_line(b: &mut Bencher) {
         let mut image = Image::new(1000, 1000);
 
+        let v0 = Vec2(130, 200);
+        let v1 = Vec2(200, 130);
+        let v2 = Vec2(800, 400);
+        let v3 = Vec2(400, 800);
+
         b.iter(|| {
-            line(130, 200, 800, 400, &mut image, WHITE);
-            line(200, 130, 400, 800, &mut image, RED);
-            line(800, 400, 130, 200, &mut image, RED);
+            line(v0, v2, &mut image, WHITE);
+            line(v1, v3, &mut image, RED);
+            line(v2, v0, &mut image, RED);
         });
     }
 }
