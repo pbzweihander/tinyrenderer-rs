@@ -1,21 +1,20 @@
 #![feature(test)]
 
-use obj::Obj;
+use {
+    nalgebra::{Point2, Point3, Vector2, Vector3},
+    obj::Obj,
+};
 
 pub use failure::Error;
 
 pub mod image;
-pub mod vec;
 
-pub use crate::{
-    image::{Color, Image},
-    vec::{Vec2, Vec3},
-};
+pub use crate::image::{Color, Image};
 
-pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
+pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Color) {
     let mut steep = false;
 
-    let (Vec2(x0, y0), Vec2(x1, y1)) = (v0, v1);
+    let (x0, y0, x1, y1) = (v0[0], v0[1], v1[0], v1[1]);
 
     let (x0, x1, y0, y1) = if isize::abs(x0 - x1) < isize::abs(y0 - y1) {
         steep = true;
@@ -56,21 +55,25 @@ pub fn line(v0: Vec2, v1: Vec2, image: &mut Image, color: Color) {
 pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
     for face in model.indices.chunks_exact(3) {
         for &(i, j) in &[(0, 1), (1, 2), (2, 0)] {
-            let v0: Vec3<_> = model.vertices[face[i] as usize].position.into();
-            let v1: Vec3<_> = model.vertices[face[j] as usize].position.into();
+            let v0: Vector3<_> = model.vertices[face[i] as usize].position.into();
+            let v1: Vector3<_> = model.vertices[face[j] as usize].position.into();
 
-            let (v0, v1): (Vec2<f32>, Vec2<f32>) = (v0.into(), v1.into());
+            let (v0, v1) = (v0.xy(), v1.xy());
 
-            let (v0, v1) = (
-                ((v0 + Vec2(1f32, 1f32)) / 2f32)
-                    .hadamard(Vec2(image.width as f32, image.height as f32)),
-                ((v1 + Vec2(1f32, 1f32)) / 2f32)
-                    .hadamard(Vec2(image.width as f32, image.height as f32)),
+            let (mut v0, mut v1) = (
+                ((v0 + Vector2::new(1f32, 1f32)) / 2f32),
+                ((v1 + Vector2::new(1f32, 1f32)) / 2f32),
             );
+            v0[0] *= image.width as f32;
+            v1[0] *= image.width as f32;
+            v0[1] *= image.height as f32;
+            v1[1] *= image.height as f32;
 
             let (v0, v1) = (v0.map(|f| f as isize), v1.map(|f| f as isize));
 
-            line(v0, v1, image, color);
+            let (p0, p1): (Point2<_>, Point2<_>) = (v0.into(), v1.into());
+
+            line(p0, p1, image, color);
         }
     }
 }
@@ -80,7 +83,8 @@ mod tests {
     extern crate test;
 
     use {
-        crate::{line, Color, Image, Vec2},
+        crate::{line, Color, Image},
+        nalgebra::Point2,
         test::Bencher,
     };
 
@@ -91,10 +95,10 @@ mod tests {
     fn bench_line(b: &mut Bencher) {
         let mut image = Image::new(1000, 1000);
 
-        let v0 = Vec2(130, 200);
-        let v1 = Vec2(200, 130);
-        let v2 = Vec2(800, 400);
-        let v3 = Vec2(400, 800);
+        let v0 = Point2::new(130, 200);
+        let v1 = Point2::new(200, 130);
+        let v2 = Point2::new(800, 400);
+        let v3 = Point2::new(400, 800);
 
         b.iter(|| {
             line(v0, v2, &mut image, WHITE);
