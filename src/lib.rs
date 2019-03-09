@@ -11,6 +11,22 @@ pub mod image;
 
 pub use crate::image::{Color, Image};
 
+fn ccw(a: Point2<isize>, b: Point2<isize>, c: Point2<isize>) -> isize {
+    (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+}
+
+fn is_in_triangle(pts: [Point2<isize>; 3], p: Point2<isize>) -> bool {
+    match (
+        ccw(pts[0], p, pts[1]) > 0,
+        ccw(pts[1], p, pts[2]) > 0,
+        ccw(pts[2], p, pts[0]) > 0,
+    ) {
+        (true, true, true) => true,
+        (false, false, false) => true,
+        _ => false,
+    }
+}
+
 pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Color) {
     let mut steep = false;
 
@@ -78,46 +94,19 @@ pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
     }
 }
 
-pub fn triangle(
-    t0: Point2<isize>,
-    t1: Point2<isize>,
-    t2: Point2<isize>,
-    image: &mut Image,
-    color: Color,
-) {
-    if t0[1] == t1[1] && t0[1] == t2[1] {
-        return;
-    }
+pub fn triangle(pts: [Point2<isize>; 3], image: &mut Image, color: Color) {
+    let bbox_min_x = isize::min(isize::min(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_min_y = isize::min(isize::min(pts[0][1], pts[1][1]), pts[2][1]);
+    let bbox_max_x = isize::max(isize::max(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_max_y = isize::max(isize::max(pts[0][1], pts[1][1]), pts[2][1]);
 
-    let (t0, t1) = if t0[1] > t1[1] { (t1, t0) } else { (t0, t1) };
-    let (t0, t2) = if t0[1] > t2[1] { (t2, t0) } else { (t0, t2) };
-    let (t1, t2) = if t1[1] > t2[1] { (t2, t1) } else { (t1, t2) };
+    for x in bbox_min_x..bbox_max_x {
+        for y in bbox_min_y..bbox_max_y {
+            let p = Point2::new(x, y);
 
-    let total_height = t2[1] - t0[1];
-
-    for i in 0..total_height {
-        let second_half = i > (t1[1] - t0[1]) || t1[1] == t0[1];
-
-        let segment_height = if second_half {
-            t2[1] - t1[1]
-        } else {
-            t1[1] - t0[1]
-        };
-
-        let alpha = i as f32 / total_height as f32;
-        let beta = (i - if second_half { t1[1] - t0[1] } else { 0 }) as f32 / segment_height as f32;
-
-        let a = t0.coords.map(|u| u as f32) + (t2 - t0).map(|u| u as f32) * alpha;
-        let b = if second_half {
-            t1.coords.map(|u| u as f32) + (t2 - t1).map(|u| u as f32) * beta
-        } else {
-            t0.coords.map(|u| u as f32) + (t1 - t0).map(|u| u as f32) * beta
-        };
-
-        let (a, b) = if a[0] > b[0] { (b, a) } else { (a, b) };
-
-        for j in (a[0] as u32)..=(b[0] as u32) {
-            image.set(j, (t0[1] + i) as u32, color);
+            if is_in_triangle(pts, p) {
+                image.set(p[0] as u32, p[1] as u32, color);
+            }
         }
     }
 }
@@ -173,9 +162,9 @@ mod tests {
         ];
 
         b.iter(|| {
-            triangle(t0[0], t0[1], t0[2], &mut image, RED);
-            triangle(t1[0], t1[1], t1[2], &mut image, WHITE);
-            triangle(t2[0], t2[1], t2[2], &mut image, BLUE);
+            triangle([t0[0], t0[1], t0[2]], &mut image, RED);
+            triangle([t1[0], t1[1], t1[2]], &mut image, WHITE);
+            triangle([t2[0], t2[1], t2[2]], &mut image, BLUE);
         });
     }
 }

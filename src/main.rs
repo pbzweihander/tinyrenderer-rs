@@ -46,9 +46,9 @@ fn main() -> Result<(), Error> {
         Point2::new(130, 180),
     ];
 
-    triangle(t0[0], t0[1], t0[2], &mut image, RED);
-    triangle(t1[0], t1[1], t1[2], &mut image, WHITE);
-    triangle(t2[0], t2[1], t2[2], &mut image, BLUE);
+    triangle([t0[0], t0[1], t0[2]], &mut image, RED);
+    triangle([t1[0], t1[1], t1[2]], &mut image, WHITE);
+    triangle([t2[0], t2[1], t2[2]], &mut image, BLUE);
 
     image.flip_vertically().write_png(out_file)?;
 

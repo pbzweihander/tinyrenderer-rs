@@ -1,9 +1,9 @@
 
 running 4 tests
 test image::tests::test_flip_vertically ... ignored
-test image::tests::bench_flip_vertically ... bench:      13,031 ns/iter (+/- 504)
-test tests::bench_line                   ... bench:       5,540 ns/iter (+/- 490)
-test tests::bench_triangle               ... bench:      22,488 ns/iter (+/- 932)
+test image::tests::bench_flip_vertically ... bench:      13,247 ns/iter (+/- 590)
+test tests::bench_line                   ... bench:       5,215 ns/iter (+/- 142)
+test tests::bench_triangle               ... bench:     455,938 ns/iter (+/- 11,342)
 
 test result: ok. 0 passed; 0 failed; 1 ignored; 3 measured; 0 filtered out
 
