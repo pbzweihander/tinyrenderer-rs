@@ -1,0 +1,14 @@
+
+running 4 tests
+test image::tests::test_flip_vertically ... ignored
+test image::tests::bench_flip_vertically ... bench:      13,031 ns/iter (+/- 504)
+test tests::bench_line                   ... bench:       5,540 ns/iter (+/- 490)
+test tests::bench_triangle               ... bench:      22,488 ns/iter (+/- 932)
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 3 measured; 0 filtered out
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+

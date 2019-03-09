@@ -1,7 +1,7 @@
 #![feature(test)]
 
 use {
-    nalgebra::{Point2, Point3, Vector2, Vector3},
+    nalgebra::{Point2, Vector2, Vector3},
     obj::Obj,
 };
 
@@ -78,18 +78,63 @@ pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
     }
 }
 
+pub fn triangle(
+    t0: Point2<isize>,
+    t1: Point2<isize>,
+    t2: Point2<isize>,
+    image: &mut Image,
+    color: Color,
+) {
+    if t0[1] == t1[1] && t0[1] == t2[1] {
+        return;
+    }
+
+    let (t0, t1) = if t0[1] > t1[1] { (t1, t0) } else { (t0, t1) };
+    let (t0, t2) = if t0[1] > t2[1] { (t2, t0) } else { (t0, t2) };
+    let (t1, t2) = if t1[1] > t2[1] { (t2, t1) } else { (t1, t2) };
+
+    let total_height = t2[1] - t0[1];
+
+    for i in 0..total_height {
+        let second_half = i > (t1[1] - t0[1]) || t1[1] == t0[1];
+
+        let segment_height = if second_half {
+            t2[1] - t1[1]
+        } else {
+            t1[1] - t0[1]
+        };
+
+        let alpha = i as f32 / total_height as f32;
+        let beta = (i - if second_half { t1[1] - t0[1] } else { 0 }) as f32 / segment_height as f32;
+
+        let a = t0.coords.map(|u| u as f32) + (t2 - t0).map(|u| u as f32) * alpha;
+        let b = if second_half {
+            t1.coords.map(|u| u as f32) + (t2 - t1).map(|u| u as f32) * beta
+        } else {
+            t0.coords.map(|u| u as f32) + (t1 - t0).map(|u| u as f32) * beta
+        };
+
+        let (a, b) = if a[0] > b[0] { (b, a) } else { (a, b) };
+
+        for j in (a[0] as u32)..=(b[0] as u32) {
+            image.set(j, (t0[1] + i) as u32, color);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
 
     use {
-        crate::{line, Color, Image},
+        crate::{line, triangle, Color, Image},
         nalgebra::Point2,
         test::Bencher,
     };
 
     const RED: Color = Color::from_rgba(255, 0, 0, 255);
     const WHITE: Color = Color::from_rgba(255, 255, 255, 255);
+    const BLUE: Color = Color::from_rgba(0, 0, 255, 255);
 
     #[bench]
     fn bench_line(b: &mut Bencher) {
@@ -104,6 +149,33 @@ mod tests {
             line(v0, v2, &mut image, WHITE);
             line(v1, v3, &mut image, RED);
             line(v2, v0, &mut image, RED);
+        });
+    }
+
+    #[bench]
+    fn bench_triangle(b: &mut Bencher) {
+        let mut image = Image::new(200, 200);
+
+        let t0 = [
+            Point2::new(10, 70),
+            Point2::new(50, 160),
+            Point2::new(70, 80),
+        ];
+        let t1 = [
+            Point2::new(180, 50),
+            Point2::new(150, 1),
+            Point2::new(70, 180),
+        ];
+        let t2 = [
+            Point2::new(180, 150),
+            Point2::new(120, 160),
+            Point2::new(130, 180),
+        ];
+
+        b.iter(|| {
+            triangle(t0[0], t0[1], t0[2], &mut image, RED);
+            triangle(t1[0], t1[1], t1[2], &mut image, WHITE);
+            triangle(t2[0], t2[1], t2[2], &mut image, BLUE);
         });
     }
 }
