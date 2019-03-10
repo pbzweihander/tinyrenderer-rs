@@ -1,7 +1,11 @@
 use {
     crate::Error,
     png::{Encoder, HasParameters},
-    std::io::Write,
+    std::{
+        fmt,
+        io::Write,
+        ops::{Index, Mul},
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -15,11 +19,70 @@ impl Color {
     pub const fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Color([r, g, b, a])
     }
+
+    pub const fn r(self) -> u8 {
+        self.0[0]
+    }
+
+    pub const fn g(self) -> u8 {
+        self.0[1]
+    }
+
+    pub const fn b(self) -> u8 {
+        self.0[2]
+    }
+
+    pub const fn a(self) -> u8 {
+        self.0[3]
+    }
+}
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "({}, {}, {}, {})",
+            self.r(),
+            self.g(),
+            self.b(),
+            self.a()
+        )
+    }
 }
 
 impl Default for Color {
     fn default() -> Self {
         Color::new()
+    }
+}
+
+impl Mul<f32> for Color {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self {
+        Color([
+            f32::max(
+                f32::min(f32::from(self.r()) * rhs, f32::from(u8::max_value())),
+                f32::from(u8::min_value()),
+            ) as u8,
+            f32::max(
+                f32::min(f32::from(self.g()) * rhs, f32::from(u8::max_value())),
+                f32::from(u8::min_value()),
+            ) as u8,
+            f32::max(
+                f32::min(f32::from(self.b()) * rhs, f32::from(u8::max_value())),
+                f32::from(u8::min_value()),
+            ) as u8,
+            self.a(),
+        ])
+    }
+}
+
+impl Index<usize> for Color {
+    type Output = u8;
+
+    fn index(&self, idx: usize) -> &u8 {
+        &self.0[idx]
     }
 }
 

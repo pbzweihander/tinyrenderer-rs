@@ -11,22 +11,6 @@ pub mod image;
 
 pub use crate::image::{Color, Image};
 
-fn ccw(a: Point2<isize>, b: Point2<isize>, c: Point2<isize>) -> isize {
-    (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
-}
-
-fn is_in_triangle(pts: [Point2<isize>; 3], p: Point2<isize>) -> bool {
-    match (
-        ccw(pts[0], p, pts[1]) > 0,
-        ccw(pts[1], p, pts[2]) > 0,
-        ccw(pts[2], p, pts[0]) > 0,
-    ) {
-        (true, true, true) => true,
-        (false, false, false) => true,
-        _ => false,
-    }
-}
-
 pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Color) {
     let mut steep = false;
 
@@ -68,29 +52,19 @@ pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Colo
     }
 }
 
-pub fn render_wireframe(model: Obj, image: &mut Image, color: Color) {
-    for face in model.indices.chunks_exact(3) {
-        for &(i, j) in &[(0, 1), (1, 2), (2, 0)] {
-            let v0: Vector3<_> = model.vertices[face[i] as usize].position.into();
-            let v1: Vector3<_> = model.vertices[face[j] as usize].position.into();
+fn ccw(a: Point2<isize>, b: Point2<isize>, c: Point2<isize>) -> isize {
+    (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+}
 
-            let (v0, v1) = (v0.xy(), v1.xy());
-
-            let (mut v0, mut v1) = (
-                ((v0 + Vector2::new(1f32, 1f32)) / 2f32),
-                ((v1 + Vector2::new(1f32, 1f32)) / 2f32),
-            );
-            v0[0] *= image.width as f32;
-            v1[0] *= image.width as f32;
-            v0[1] *= image.height as f32;
-            v1[1] *= image.height as f32;
-
-            let (v0, v1) = (v0.map(|f| f as isize), v1.map(|f| f as isize));
-
-            let (p0, p1): (Point2<_>, Point2<_>) = (v0.into(), v1.into());
-
-            line(p0, p1, image, color);
-        }
+fn is_in_triangle(pts: [Point2<isize>; 3], p: Point2<isize>) -> bool {
+    match (
+        ccw(pts[0], p, pts[1]) > 0,
+        ccw(pts[1], p, pts[2]) > 0,
+        ccw(pts[2], p, pts[0]) > 0,
+    ) {
+        (true, true, true) => true,
+        (false, false, false) => true,
+        _ => false,
     }
 }
 
@@ -107,6 +81,60 @@ pub fn triangle(pts: [Point2<isize>; 3], image: &mut Image, color: Color) {
             if is_in_triangle(pts, p) {
                 image.set(p[0] as u32, p[1] as u32, color);
             }
+        }
+    }
+}
+
+fn world_to_screen_coords(p: Vector2<f32>, width: u32, height: u32) -> Vector2<f32> {
+    Vector2::new(
+        (p[0] + 1f32) * width as f32 / 2f32,
+        (p[1] + 1f32) * height as f32 / 2f32,
+    )
+}
+
+pub fn render_wireframe(model: &Obj, image: &mut Image, color: Color) {
+    for face in model.indices.chunks_exact(3) {
+        for &(i, j) in &[(0, 1), (1, 2), (2, 0)] {
+            let v0: Vector3<_> = model.vertices[face[i] as usize].position.into();
+            let v1: Vector3<_> = model.vertices[face[j] as usize].position.into();
+
+            let (v0, v1) = (
+                world_to_screen_coords(v0.xy(), image.width, image.height).map(|f| f as isize),
+                world_to_screen_coords(v1.xy(), image.width, image.height).map(|f| f as isize),
+            );
+
+            line(v0.into(), v1.into(), image, color);
+        }
+    }
+}
+
+pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_dir: Vector3<f32>) {
+    for face in model.indices.chunks_exact(3) {
+        let (screen_coords, world_coords): (Vec<Point2<_>>, Vec<Vector3<_>>) = face
+            .iter()
+            .map(|i| model.vertices[*i as usize].position.into())
+            .map(|v: Vector3<_>| -> (Point2<_>, Vector3<_>) {
+                (
+                    world_to_screen_coords(v.xy(), image.width, image.height)
+                        .map(|f| f as isize)
+                        .into(),
+                    v,
+                )
+            })
+            .unzip();
+
+        let n = (world_coords[2] - world_coords[0])
+            .cross(&(world_coords[1] - world_coords[0]))
+            .normalize();
+        let intensity = n.dot(&light_dir);
+
+        if intensity > 0f32 {
+            let color = color * intensity;
+            triangle(
+                [screen_coords[0], screen_coords[1], screen_coords[2]],
+                image,
+                color,
+            );
         }
     }
 }
