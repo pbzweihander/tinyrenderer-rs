@@ -1,5 +1,5 @@
 use {
-    crate::Error,
+    crate::{coord_to_idx, Error},
     png::{Encoder, HasParameters},
     std::{
         fmt,
@@ -110,11 +110,6 @@ impl Image {
         }
     }
 
-    #[inline]
-    const fn coord(&self, x: u32, y: u32) -> usize {
-        (self.width * y + x) as usize
-    }
-
     pub fn set(&mut self, x: u32, y: u32, color: Color) -> &mut Self {
         if x < self.width && y < self.height {
             self.data[(x + y * self.width) as usize] = color;
@@ -126,8 +121,8 @@ impl Image {
         let half = self.height >> 1;
 
         for y in 0..half {
-            let top_left = self.coord(0, y);
-            let bottom_right = self.coord(self.width, self.height - y - 1);
+            let top_left = coord_to_idx(0, y, self.width);
+            let bottom_right = coord_to_idx(self.width, self.height - y - 1, self.width);
 
             let s = &mut self.data[top_left..bottom_right];
             let (top_line, s) = s.split_at_mut(self.width as usize);
@@ -144,8 +139,8 @@ impl Image {
 
         for y in 0..self.height {
             for x in 0..half {
-                let left_line = self.coord(x, y);
-                let right_line = self.coord(self.width - x - 1, y);
+                let left_line = coord_to_idx(x, y, self.width);
+                let right_line = coord_to_idx(self.width - x - 1, y, self.width);
 
                 self.data.swap(left_line, right_line);
             }

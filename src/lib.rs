@@ -1,8 +1,12 @@
 #![feature(test)]
 
 use {
-    nalgebra::{Point2, Vector2, Vector3},
+    nalgebra::{Point2, Point3, Vector, Vector3},
     obj::Obj,
+    std::{
+        fmt::Debug,
+        ops::{Mul, Sub},
+    },
 };
 
 pub use failure::Error;
@@ -10,6 +14,16 @@ pub use failure::Error;
 pub mod image;
 
 pub use crate::image::{Color, Image};
+
+#[inline]
+pub(crate) const fn coord_to_idx(x: u32, y: u32, width: u32) -> usize {
+    (width * y + x) as usize
+}
+
+// #[inline]
+// pub(crate) const fn idx_to_coord(idx: usize, width: u32) -> (u32, u32) {
+//     ((idx % width as usize) as u32, (idx / width as usize) as u32)
+// }
 
 pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Color) {
     let mut steep = false;
@@ -52,15 +66,51 @@ pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Colo
     }
 }
 
-fn ccw(a: Point2<isize>, b: Point2<isize>, c: Point2<isize>) -> isize {
+trait Signed: Sized {
+    fn is_positive_or_zero(self) -> bool;
+}
+
+impl Signed for isize {
+    fn is_positive_or_zero(self) -> bool {
+        self >= 0
+    }
+}
+
+impl Signed for f32 {
+    fn is_positive_or_zero(self) -> bool {
+        self >= 0f32
+    }
+}
+
+fn ccw<N>(a: Point2<N>, b: Point2<N>, c: Point2<N>) -> N
+where
+    N: Debug
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + Sub<N, Output = N>
+        + Mul<N, Output = N>
+        + Signed
+        + 'static,
+{
     (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
 }
 
-fn is_in_triangle(pts: [Point2<isize>; 3], p: Point2<isize>) -> bool {
+fn is_in_triangle<N>(pts: [Point2<N>; 3], p: Point2<N>) -> bool
+where
+    N: Debug
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + Sub<N, Output = N>
+        + Mul<N, Output = N>
+        + Signed
+        + 'static,
+{
     match (
-        ccw(pts[0], p, pts[1]) > 0,
-        ccw(pts[1], p, pts[2]) > 0,
-        ccw(pts[2], p, pts[0]) > 0,
+        ccw(pts[0], p, pts[1]).is_positive_or_zero(),
+        ccw(pts[1], p, pts[2]).is_positive_or_zero(),
+        ccw(pts[2], p, pts[0]).is_positive_or_zero(),
     ) {
         (true, true, true) => true,
         (false, false, false) => true,
@@ -85,11 +135,47 @@ pub fn triangle(pts: [Point2<isize>; 3], image: &mut Image, color: Color) {
     }
 }
 
-fn world_to_screen_coords(p: Vector2<f32>, width: u32, height: u32) -> Vector2<f32> {
-    Vector2::new(
-        (p[0] + 1f32) * width as f32 / 2f32,
-        (p[1] + 1f32) * height as f32 / 2f32,
-    )
+pub fn triangle_with_zbuffer(
+    pts: [Point3<f32>; 3],
+    zbuffer: &mut [f32],
+    image: &mut Image,
+    color: Color,
+) {
+    let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_min_y = f32::min(f32::min(pts[0][1], pts[1][1]), pts[2][1]);
+    let bbox_max_x = f32::max(f32::max(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_max_y = f32::max(f32::max(pts[0][1], pts[1][1]), pts[2][1]);
+
+    for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
+        for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
+            let p = Point2::new(x as f32, y as f32);
+            let z = pts[0][2] + pts[1][2] + pts[2][2];
+
+            if is_in_triangle([pts[0].xy(), pts[1].xy(), pts[2].xy()], p) {
+                let idx = coord_to_idx(x, y, image.width);
+
+                if zbuffer[idx] < z {
+                    zbuffer[idx] = z;
+                    image.set(x, y, color);
+                }
+            }
+        }
+    }
+}
+
+fn world_to_screen_coords<D, S>(
+    mut p: Vector<f32, D, S>,
+    width: u32,
+    height: u32,
+) -> Vector<f32, D, S>
+where
+    D: nalgebra::Dim,
+    S: nalgebra::base::storage::StorageMut<f32, D>,
+{
+    p[0] = (p[0] + 1f32) * width as f32 / 2f32;
+    p[1] = (p[1] + 1f32) * height as f32 / 2f32;
+
+    p
 }
 
 pub fn render_wireframe(model: &Obj, image: &mut Image, color: Color) {
@@ -109,15 +195,15 @@ pub fn render_wireframe(model: &Obj, image: &mut Image, color: Color) {
 }
 
 pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_dir: Vector3<f32>) {
+    let mut zbuffer = vec![std::f32::MIN; image.height as usize * image.width as usize];
+
     for face in model.indices.chunks_exact(3) {
-        let (screen_coords, world_coords): (Vec<Point2<_>>, Vec<Vector3<_>>) = face
+        let (screen_coords, world_coords): (Vec<Point3<_>>, Vec<Vector3<_>>) = face
             .iter()
             .map(|i| model.vertices[*i as usize].position.into())
-            .map(|v: Vector3<_>| -> (Point2<_>, Vector3<_>) {
+            .map(|v: Vector3<_>| -> (Point3<_>, Vector3<_>) {
                 (
-                    world_to_screen_coords(v.xy(), image.width, image.height)
-                        .map(|f| f as isize)
-                        .into(),
+                    world_to_screen_coords(v, image.width, image.height).into(),
                     v,
                 )
             })
@@ -130,8 +216,9 @@ pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_d
 
         if intensity > 0f32 {
             let color = color * intensity;
-            triangle(
+            triangle_with_zbuffer(
                 [screen_coords[0], screen_coords[1], screen_coords[2]],
+                &mut zbuffer,
                 image,
                 color,
             );
