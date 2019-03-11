@@ -134,7 +134,7 @@ pub fn triangle_with_zbuffer(
 
                 if zbuffer[idx] < z {
                     zbuffer[idx] = z;
-                    image.set(x, y, color);
+                    image.data[idx] = color;
                 }
             }
         }

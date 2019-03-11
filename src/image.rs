@@ -112,7 +112,7 @@ impl Image {
 
     pub fn set(&mut self, x: u32, y: u32, color: Color) -> &mut Self {
         if x < self.width && y < self.height {
-            self.data[(x + y * self.width) as usize] = color;
+            self.data[coord_to_idx(x, y, self.width)] = color;
         }
         self
     }
