@@ -3,10 +3,6 @@
 use {
     nalgebra::{Point2, Point3, Vector, Vector3},
     obj::Obj,
-    std::{
-        fmt::Debug,
-        ops::{Mul, Sub},
-    },
 };
 
 pub use failure::Error;
@@ -66,70 +62,45 @@ pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Colo
     }
 }
 
-trait Signed: Sized {
-    fn is_positive_or_zero(self) -> bool;
-}
+fn barycentric(pts: [Point2<f32>; 3], p: Point2<f32>) -> Point3<f32> {
+    use nalgebra::Matrix2x3;
 
-impl Signed for isize {
-    fn is_positive_or_zero(self) -> bool {
-        self >= 0
+    let ab = pts[1] - pts[0];
+    let ac = pts[2] - pts[0];
+    let pa = pts[0] - p;
+
+    let m = Matrix2x3::from_columns(&[ab, ac, pa]);
+
+    let x = m.row(0);
+    let y = m.row(1);
+
+    let uv1 = x.cross(&y);
+
+    if f32::abs(uv1[2]) > 0.01 {
+        Point3::new(
+            1f32 - (uv1[0] + uv1[1]) / uv1[2],
+            uv1[1] / uv1[2],
+            uv1[0] / uv1[2],
+        )
+    } else {
+        Point3::new(-1f32, 1f32, 1f32)
     }
 }
 
-impl Signed for f32 {
-    fn is_positive_or_zero(self) -> bool {
-        self >= 0f32
-    }
-}
+pub fn triangle(pts: [Point2<f32>; 3], image: &mut Image, color: Color) {
+    let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_min_y = f32::min(f32::min(pts[0][1], pts[1][1]), pts[2][1]);
+    let bbox_max_x = f32::max(f32::max(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_max_y = f32::max(f32::max(pts[0][1], pts[1][1]), pts[2][1]);
 
-fn ccw<N>(a: Point2<N>, b: Point2<N>, c: Point2<N>) -> N
-where
-    N: Debug
-        + Copy
-        + PartialEq
-        + PartialOrd
-        + Sub<N, Output = N>
-        + Mul<N, Output = N>
-        + Signed
-        + 'static,
-{
-    (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
-}
+    for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
+        for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
+            let p = Point2::new(x as f32, y as f32);
 
-fn is_in_triangle<N>(pts: [Point2<N>; 3], p: Point2<N>) -> bool
-where
-    N: Debug
-        + Copy
-        + PartialEq
-        + PartialOrd
-        + Sub<N, Output = N>
-        + Mul<N, Output = N>
-        + Signed
-        + 'static,
-{
-    match (
-        ccw(pts[0], p, pts[1]).is_positive_or_zero(),
-        ccw(pts[1], p, pts[2]).is_positive_or_zero(),
-        ccw(pts[2], p, pts[0]).is_positive_or_zero(),
-    ) {
-        (true, true, true) => true,
-        (false, false, false) => true,
-        _ => false,
-    }
-}
+            let bc_screen = barycentric(pts, p);
 
-pub fn triangle(pts: [Point2<isize>; 3], image: &mut Image, color: Color) {
-    let bbox_min_x = isize::min(isize::min(pts[0][0], pts[1][0]), pts[2][0]);
-    let bbox_min_y = isize::min(isize::min(pts[0][1], pts[1][1]), pts[2][1]);
-    let bbox_max_x = isize::max(isize::max(pts[0][0], pts[1][0]), pts[2][0]);
-    let bbox_max_y = isize::max(isize::max(pts[0][1], pts[1][1]), pts[2][1]);
-
-    for x in bbox_min_x..bbox_max_x {
-        for y in bbox_min_y..bbox_max_y {
-            let p = Point2::new(x, y);
-
-            if is_in_triangle(pts, p) {
-                image.set(p[0] as u32, p[1] as u32, color);
+            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
+                image.set(x, y, color);
             }
         }
     }
@@ -149,9 +120,16 @@ pub fn triangle_with_zbuffer(
     for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
         for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
             let p = Point2::new(x as f32, y as f32);
-            let z = pts[0][2] + pts[1][2] + pts[2][2];
 
-            if is_in_triangle([pts[0].xy(), pts[1].xy(), pts[2].xy()], p) {
+            let bc_screen = barycentric([pts[0].xy(), pts[1].xy(), pts[2].xy()], p);
+
+            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
+                let mut z = 0f32;
+
+                for i in 0..3 {
+                    z += pts[i][2] * bc_screen[i];
+                }
+
                 let idx = coord_to_idx(x, y, image.width);
 
                 if zbuffer[idx] < z {
@@ -231,13 +209,14 @@ mod tests {
     extern crate test;
 
     use {
-        crate::{line, triangle, Color, Image},
-        nalgebra::Point2,
+        crate::{line, triangle, triangle_with_zbuffer, Color, Image},
+        nalgebra::{Point2, Point3},
         test::Bencher,
     };
 
-    const RED: Color = Color::from_rgba(255, 0, 0, 255);
     const WHITE: Color = Color::from_rgba(255, 255, 255, 255);
+    const RED: Color = Color::from_rgba(255, 0, 0, 255);
+    const GREEN: Color = Color::from_rgba(0, 255, 0, 255);
     const BLUE: Color = Color::from_rgba(0, 0, 255, 255);
 
     #[bench]
@@ -261,25 +240,53 @@ mod tests {
         let mut image = Image::new(200, 200);
 
         let t0 = [
-            Point2::new(10, 70),
-            Point2::new(50, 160),
-            Point2::new(70, 80),
+            Point2::new(10f32, 70f32),
+            Point2::new(50f32, 160f32),
+            Point2::new(70f32, 80f32),
         ];
         let t1 = [
-            Point2::new(180, 50),
-            Point2::new(150, 1),
-            Point2::new(70, 180),
+            Point2::new(180f32, 50f32),
+            Point2::new(150f32, 1f32),
+            Point2::new(70f32, 180f32),
         ];
         let t2 = [
-            Point2::new(180, 150),
-            Point2::new(120, 160),
-            Point2::new(130, 180),
+            Point2::new(180f32, 150f32),
+            Point2::new(120f32, 160f32),
+            Point2::new(130f32, 180f32),
         ];
 
         b.iter(|| {
-            triangle([t0[0], t0[1], t0[2]], &mut image, RED);
-            triangle([t1[0], t1[1], t1[2]], &mut image, WHITE);
-            triangle([t2[0], t2[1], t2[2]], &mut image, BLUE);
+            triangle(t0, &mut image, RED);
+            triangle(t1, &mut image, WHITE);
+            triangle(t2, &mut image, BLUE);
+        });
+    }
+
+    #[bench]
+    fn bench_triangle_with_zbuffer(b: &mut Bencher) {
+        let mut image = Image::new(800, 800);
+        let mut zbuffer = vec![std::f32::MIN; 800 * 800];
+
+        let t0 = [
+            Point3::new(20f32, 400f32, 34f32),
+            Point3::new(744f32, 600f32, 400f32),
+            Point3::new(744f32, 200f32, 400f32),
+        ];
+        let t1 = [
+            Point3::new(120f32, 700f32, 434f32),
+            Point3::new(120f32, 100f32, 434f32),
+            Point3::new(444f32, 400f32, 400f32),
+        ];
+        let t2 = [
+            Point3::new(330f32, 400f32, 463f32),
+            Point3::new(594f32, 5f32, 200f32),
+            Point3::new(594f32, 795f32, 200f32),
+        ];
+
+        b.iter(|| {
+            triangle_with_zbuffer(t0, &mut zbuffer, &mut image, RED);
+            triangle_with_zbuffer(t1, &mut zbuffer, &mut image, GREEN);
+            triangle_with_zbuffer(t2, &mut zbuffer, &mut image, BLUE);
         });
     }
 }
