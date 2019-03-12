@@ -2,7 +2,7 @@
 
 use {
     nalgebra::{Point2, Point3, Vector, Vector3},
-    obj::Obj,
+    obj::{Obj, TexturedVertex},
 };
 
 pub use failure::Error;
@@ -87,6 +87,15 @@ fn barycentric(pts: [Point2<f32>; 3], p: Point2<f32>) -> Point3<f32> {
     }
 }
 
+fn un_barycentric(pts: [Point2<f32>; 3], p: Point3<f32>) -> Point2<f32> {
+    use nalgebra::Matrix2x3;
+
+    let m = Matrix2x3::from_columns(&[pts[0].coords, pts[1].coords, pts[2].coords]).transpose();
+    let v = p.coords.transpose() * m;
+
+    Point2::new(v[0], v[1])
+}
+
 pub fn triangle(pts: [Point2<f32>; 3], image: &mut Image, color: Color) {
     let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
     let bbox_min_y = f32::min(f32::min(pts[0][1], pts[1][1]), pts[2][1]);
@@ -133,6 +142,59 @@ pub fn triangle_with_zbuffer(
                 let idx = coord_to_idx(x, y, image.width);
 
                 if zbuffer[idx] < z {
+                    zbuffer[idx] = z;
+                    image.data[idx] = color;
+                }
+            }
+        }
+    }
+}
+
+pub fn triangle_with_zbuffer_with_texture(
+    pts: [Point3<f32>; 3],
+    zbuffer: &mut [f32],
+    image: &mut Image,
+    texture: &Image,
+    texture_coords: [Point3<f32>; 3],
+    intensity: f32,
+) {
+    let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_min_y = f32::min(f32::min(pts[0][1], pts[1][1]), pts[2][1]);
+    let bbox_max_x = f32::max(f32::max(pts[0][0], pts[1][0]), pts[2][0]);
+    let bbox_max_y = f32::max(f32::max(pts[0][1], pts[1][1]), pts[2][1]);
+
+    for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
+        for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
+            let p = Point2::new(x as f32, y as f32);
+
+            let bc_screen = barycentric([pts[0].xy(), pts[1].xy(), pts[2].xy()], p);
+
+            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
+                let mut z = 0f32;
+
+                for i in 0..3 {
+                    z += pts[i][2] * bc_screen[i];
+                }
+
+                let idx = coord_to_idx(x, y, image.width);
+
+                if zbuffer[idx] < z {
+                    let texture_coords = texture_coords
+                        .iter()
+                        .map(|vt| {
+                            Point2::new(vt[0] * texture.width as f32, vt[1] * texture.height as f32)
+                        })
+                        .collect::<Vec<_>>();
+
+                    let vt = un_barycentric(
+                        [texture_coords[0], texture_coords[2], texture_coords[1]],
+                        bc_screen,
+                    );
+
+                    let t_idx = coord_to_idx(vt[0] as u32, vt[1] as u32, texture.width);
+
+                    let color = texture.data[t_idx] * intensity;
+
                     zbuffer[idx] = z;
                     image.data[idx] = color;
                 }
@@ -199,6 +261,56 @@ pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_d
                 &mut zbuffer,
                 image,
                 color,
+            );
+        }
+    }
+}
+
+pub fn render_flat_shading_with_texture(
+    model: &Obj<TexturedVertex>,
+    image: &mut Image,
+    texture: &Image,
+    light_dir: Vector3<f32>,
+) {
+    let mut zbuffer = vec![std::f32::MIN; image.height as usize * image.width as usize];
+
+    for face in model.indices.chunks_exact(3) {
+        let (mut screen_coords, mut world_coords, mut texture_coords): (
+            Vec<Point3<_>>,
+            Vec<Vector3<_>>,
+            Vec<Point3<_>>,
+        ) = (
+            Vec::with_capacity(3),
+            Vec::with_capacity(3),
+            Vec::with_capacity(3),
+        );
+
+        for &i in face {
+            let v = model.vertices[i as usize];
+            let vp: Vector3<_> = v.position.into();
+            let vt: Vector3<_> = v.texture.into();
+
+            screen_coords.push(world_to_screen_coords(vp, image.width, image.height).into());
+            world_coords.push(vp);
+            texture_coords.push(vt.into());
+        }
+
+        let (screen_coords, world_coords, texture_coords) =
+            (screen_coords, world_coords, texture_coords);
+
+        let n = (world_coords[2] - world_coords[0])
+            .cross(&(world_coords[1] - world_coords[0]))
+            .normalize();
+        let intensity = n.dot(&light_dir);
+
+        if intensity > 0f32 {
+            triangle_with_zbuffer_with_texture(
+                [screen_coords[0], screen_coords[1], screen_coords[2]],
+                &mut zbuffer,
+                image,
+                texture,
+                [texture_coords[0], texture_coords[1], texture_coords[2]],
+                intensity,
             );
         }
     }
