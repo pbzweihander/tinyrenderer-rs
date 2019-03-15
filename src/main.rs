@@ -57,12 +57,7 @@ fn main() -> Result<(), Error> {
     let out_file = File::create(&out_file_name)?;
 
     let mut image = Image::with_background(WIDTH, HEIGHT, BLACK);
-    render_flat_shading_with_texture(
-        &model,
-        &mut image,
-        &texture,
-        Vector3::new(0f32, 0f32, -1f32),
-    );
+    render_flat_shading_with_texture(&model, &mut image, &texture, Vector3::new(0.0, 0.0, -1.0));
 
     image.flip_vertically().write_png(out_file)?;
 

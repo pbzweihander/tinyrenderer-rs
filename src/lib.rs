@@ -1,7 +1,7 @@
 #![feature(test)]
 
 use {
-    nalgebra::{Point2, Point3, Vector, Vector3},
+    nalgebra::{Vector, Vector2, Vector3},
     obj::{Obj, TexturedVertex},
 };
 
@@ -21,7 +21,7 @@ pub(crate) const fn coord_to_idx(x: u32, y: u32, width: u32) -> usize {
 //     ((idx % width as usize) as u32, (idx / width as usize) as u32)
 // }
 
-pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Color) {
+pub fn line(v0: Vector2<isize>, v1: Vector2<isize>, image: &mut Image, color: Color) {
     let mut steep = false;
 
     let (x0, y0, x1, y1) = (v0[0], v0[1], v1[0], v1[1]);
@@ -62,7 +62,7 @@ pub fn line(v0: Point2<isize>, v1: Point2<isize>, image: &mut Image, color: Colo
     }
 }
 
-fn barycentric(pts: [Point2<f32>; 3], p: Point2<f32>) -> Point3<f32> {
+fn barycentric(pts: [Vector2<f32>; 3], p: Vector2<f32>) -> Vector3<f32> {
     use nalgebra::Matrix2x3;
 
     let ab = pts[1] - pts[0];
@@ -77,26 +77,26 @@ fn barycentric(pts: [Point2<f32>; 3], p: Point2<f32>) -> Point3<f32> {
     let uv1 = x.cross(&y);
 
     if f32::abs(uv1[2]) > 0.01 {
-        Point3::new(
-            1f32 - (uv1[0] + uv1[1]) / uv1[2],
+        Vector3::new(
+            1.0 - (uv1[0] + uv1[1]) / uv1[2],
             uv1[1] / uv1[2],
             uv1[0] / uv1[2],
         )
     } else {
-        Point3::new(-1f32, 1f32, 1f32)
+        Vector3::new(-1.0, 1.0, 1.0)
     }
 }
 
-fn un_barycentric(pts: [Point2<f32>; 3], p: Point3<f32>) -> Point2<f32> {
+fn un_barycentric(pts: [Vector2<f32>; 3], p: Vector3<f32>) -> Vector2<f32> {
     use nalgebra::Matrix2x3;
 
-    let m = Matrix2x3::from_columns(&[pts[0].coords, pts[1].coords, pts[2].coords]).transpose();
-    let v = p.coords.transpose() * m;
+    let m = Matrix2x3::from_columns(&[pts[0], pts[1], pts[2]]).transpose();
+    let v = p.transpose() * m;
 
-    Point2::new(v[0], v[1])
+    Vector2::new(v[0], v[1])
 }
 
-pub fn triangle(pts: [Point2<f32>; 3], image: &mut Image, color: Color) {
+pub fn triangle(pts: [Vector2<f32>; 3], image: &mut Image, color: Color) {
     let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
     let bbox_min_y = f32::min(f32::min(pts[0][1], pts[1][1]), pts[2][1]);
     let bbox_max_x = f32::max(f32::max(pts[0][0], pts[1][0]), pts[2][0]);
@@ -104,11 +104,11 @@ pub fn triangle(pts: [Point2<f32>; 3], image: &mut Image, color: Color) {
 
     for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
         for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
-            let p = Point2::new(x as f32, y as f32);
+            let p = Vector2::new(x as f32, y as f32);
 
             let bc_screen = barycentric(pts, p);
 
-            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
+            if bc_screen[0] >= 0.0 && bc_screen[1] >= 0.0 && bc_screen[2] >= 0.0 {
                 image.set(x, y, color);
             }
         }
@@ -116,7 +116,7 @@ pub fn triangle(pts: [Point2<f32>; 3], image: &mut Image, color: Color) {
 }
 
 pub fn triangle_with_zbuffer(
-    pts: [Point3<f32>; 3],
+    pts: [Vector3<f32>; 3],
     zbuffer: &mut [f32],
     image: &mut Image,
     color: Color,
@@ -128,12 +128,12 @@ pub fn triangle_with_zbuffer(
 
     for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
         for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
-            let p = Point2::new(x as f32, y as f32);
+            let p = Vector2::new(x as f32, y as f32);
 
             let bc_screen = barycentric([pts[0].xy(), pts[1].xy(), pts[2].xy()], p);
 
-            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
-                let mut z = 0f32;
+            if bc_screen[0] >= 0.0 && bc_screen[1] >= 0.0 && bc_screen[2] >= 0.0 {
+                let mut z = 0.0;
 
                 for i in 0..3 {
                     z += pts[i][2] * bc_screen[i];
@@ -151,11 +151,11 @@ pub fn triangle_with_zbuffer(
 }
 
 pub fn triangle_with_zbuffer_with_texture(
-    pts: [Point3<f32>; 3],
+    pts: [Vector3<f32>; 3],
     zbuffer: &mut [f32],
     image: &mut Image,
     texture: &Image,
-    texture_coords: [Point3<f32>; 3],
+    texture_coords: [Vector3<f32>; 3],
     intensity: f32,
 ) {
     let bbox_min_x = f32::min(f32::min(pts[0][0], pts[1][0]), pts[2][0]);
@@ -165,12 +165,12 @@ pub fn triangle_with_zbuffer_with_texture(
 
     for x in (bbox_min_x.floor() as u32)..(bbox_max_x.ceil() as u32) {
         for y in (bbox_min_y.floor() as u32)..(bbox_max_y.ceil() as u32) {
-            let p = Point2::new(x as f32, y as f32);
+            let p = Vector2::new(x as f32, y as f32);
 
             let bc_screen = barycentric([pts[0].xy(), pts[1].xy(), pts[2].xy()], p);
 
-            if bc_screen[0] >= 0f32 && bc_screen[1] >= 0f32 && bc_screen[2] >= 0f32 {
-                let mut z = 0f32;
+            if bc_screen[0] >= 0.0 && bc_screen[1] >= 0.0 && bc_screen[2] >= 0.0 {
+                let mut z = 0.0;
 
                 for i in 0..3 {
                     z += pts[i][2] * bc_screen[i];
@@ -182,7 +182,10 @@ pub fn triangle_with_zbuffer_with_texture(
                     let texture_coords = texture_coords
                         .iter()
                         .map(|vt| {
-                            Point2::new(vt[0] * texture.width as f32, vt[1] * texture.height as f32)
+                            Vector2::new(
+                                vt[0] * texture.width as f32,
+                                vt[1] * texture.height as f32,
+                            )
                         })
                         .collect::<Vec<_>>();
 
@@ -212,8 +215,8 @@ where
     D: nalgebra::Dim,
     S: nalgebra::base::storage::StorageMut<f32, D>,
 {
-    p[0] = (p[0] + 1f32) * width as f32 / 2f32;
-    p[1] = (p[1] + 1f32) * height as f32 / 2f32;
+    p[0] = (p[0] + 1.0) * width as f32 / 2.0;
+    p[1] = (p[1] + 1.0) * height as f32 / 2.0;
 
     p
 }
@@ -229,7 +232,7 @@ pub fn render_wireframe(model: &Obj, image: &mut Image, color: Color) {
                 world_to_screen_coords(v1.xy(), image.width, image.height).map(|f| f as isize),
             );
 
-            line(v0.into(), v1.into(), image, color);
+            line(v0, v1, image, color);
         }
     }
 }
@@ -238,15 +241,10 @@ pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_d
     let mut zbuffer = vec![std::f32::MIN; image.height as usize * image.width as usize];
 
     for face in model.indices.chunks_exact(3) {
-        let (screen_coords, world_coords): (Vec<Point3<_>>, Vec<Vector3<_>>) = face
+        let (screen_coords, world_coords): (Vec<Vector3<_>>, Vec<Vector3<_>>) = face
             .iter()
             .map(|i| model.vertices[*i as usize].position.into())
-            .map(|v: Vector3<_>| -> (Point3<_>, Vector3<_>) {
-                (
-                    world_to_screen_coords(v, image.width, image.height).into(),
-                    v,
-                )
-            })
+            .map(|v| (world_to_screen_coords(v, image.width, image.height), v))
             .unzip();
 
         let n = (world_coords[2] - world_coords[0])
@@ -254,7 +252,7 @@ pub fn render_flat_shading(model: &Obj, image: &mut Image, color: Color, light_d
             .normalize();
         let intensity = n.dot(&light_dir);
 
-        if intensity > 0f32 {
+        if intensity > 0.0 {
             let color = color * intensity;
             triangle_with_zbuffer(
                 [screen_coords[0], screen_coords[1], screen_coords[2]],
@@ -276,9 +274,9 @@ pub fn render_flat_shading_with_texture(
 
     for face in model.indices.chunks_exact(3) {
         let (mut screen_coords, mut world_coords, mut texture_coords): (
-            Vec<Point3<_>>,
             Vec<Vector3<_>>,
-            Vec<Point3<_>>,
+            Vec<Vector3<_>>,
+            Vec<Vector3<_>>,
         ) = (
             Vec::with_capacity(3),
             Vec::with_capacity(3),
@@ -288,11 +286,10 @@ pub fn render_flat_shading_with_texture(
         for &i in face {
             let v = model.vertices[i as usize];
             let vp: Vector3<_> = v.position.into();
-            let vt: Vector3<_> = v.texture.into();
 
-            screen_coords.push(world_to_screen_coords(vp, image.width, image.height).into());
+            screen_coords.push(world_to_screen_coords(vp, image.width, image.height));
             world_coords.push(vp);
-            texture_coords.push(vt.into());
+            texture_coords.push(v.texture.into());
         }
 
         let (screen_coords, world_coords, texture_coords) =
@@ -303,7 +300,7 @@ pub fn render_flat_shading_with_texture(
             .normalize();
         let intensity = n.dot(&light_dir);
 
-        if intensity > 0f32 {
+        if intensity > 0.0 {
             triangle_with_zbuffer_with_texture(
                 [screen_coords[0], screen_coords[1], screen_coords[2]],
                 &mut zbuffer,
@@ -322,7 +319,7 @@ mod tests {
 
     use {
         crate::{line, triangle, triangle_with_zbuffer, Color, Image},
-        nalgebra::{Point2, Point3},
+        nalgebra::{Vector2, Vector3},
         test::Bencher,
     };
 
@@ -335,10 +332,10 @@ mod tests {
     fn bench_line(b: &mut Bencher) {
         let mut image = Image::new(1000, 1000);
 
-        let v0 = Point2::new(130, 200);
-        let v1 = Point2::new(200, 130);
-        let v2 = Point2::new(800, 400);
-        let v3 = Point2::new(400, 800);
+        let v0 = Vector2::new(130, 200);
+        let v1 = Vector2::new(200, 130);
+        let v2 = Vector2::new(800, 400);
+        let v3 = Vector2::new(400, 800);
 
         b.iter(|| {
             line(v0, v2, &mut image, WHITE);
@@ -352,19 +349,19 @@ mod tests {
         let mut image = Image::new(200, 200);
 
         let t0 = [
-            Point2::new(10f32, 70f32),
-            Point2::new(50f32, 160f32),
-            Point2::new(70f32, 80f32),
+            Vector2::new(10.0, 70.0),
+            Vector2::new(50.0, 160.0),
+            Vector2::new(70.0, 80.0),
         ];
         let t1 = [
-            Point2::new(180f32, 50f32),
-            Point2::new(150f32, 1f32),
-            Point2::new(70f32, 180f32),
+            Vector2::new(180.0, 50.0),
+            Vector2::new(150.0, 1.0),
+            Vector2::new(70.0, 180.0),
         ];
         let t2 = [
-            Point2::new(180f32, 150f32),
-            Point2::new(120f32, 160f32),
-            Point2::new(130f32, 180f32),
+            Vector2::new(180.0, 150.0),
+            Vector2::new(120.0, 160.0),
+            Vector2::new(130.0, 180.0),
         ];
 
         b.iter(|| {
@@ -380,19 +377,19 @@ mod tests {
         let mut zbuffer = vec![std::f32::MIN; 800 * 800];
 
         let t0 = [
-            Point3::new(20f32, 400f32, 34f32),
-            Point3::new(744f32, 600f32, 400f32),
-            Point3::new(744f32, 200f32, 400f32),
+            Vector3::new(20.0, 400.0, 34.0),
+            Vector3::new(744.0, 600.0, 400.0),
+            Vector3::new(744.0, 200.0, 400.0),
         ];
         let t1 = [
-            Point3::new(120f32, 700f32, 434f32),
-            Point3::new(120f32, 100f32, 434f32),
-            Point3::new(444f32, 400f32, 400f32),
+            Vector3::new(120.0, 700.0, 434.0),
+            Vector3::new(120.0, 100.0, 434.0),
+            Vector3::new(444.0, 400.0, 400.0),
         ];
         let t2 = [
-            Point3::new(330f32, 400f32, 463f32),
-            Point3::new(594f32, 5f32, 200f32),
-            Point3::new(594f32, 795f32, 200f32),
+            Vector3::new(330.0, 400.0, 463.0),
+            Vector3::new(594.0, 5.0, 200.0),
+            Vector3::new(594.0, 795.0, 200.0),
         ];
 
         b.iter(|| {
